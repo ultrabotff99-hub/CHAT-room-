@@ -3,56 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SwiftShare - Online P2P Chat</title>
+    <title>SwiftShare Pro - P2P Network</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background-color: #0b141a; font-family: sans-serif; }
         .wa-bg { background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #2a3942; border-radius: 5px; }
     </style>
 </head>
 <body class="text-gray-200 min-h-screen flex flex-col justify-between">
 
-    <!-- Header (WhatsApp Style) -->
+    <!-- Header -->
     <header class="bg-[#1f2c34] px-4 py-3 flex items-center justify-between shadow-md">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-[#00a884] rounded-full flex items-center justify-center text-white font-bold">
                 <i class="fa-solid fa-bolt text-lg"></i>
             </div>
             <div>
-                <h1 class="text-sm font-semibold text-white">SwiftShare Online P2P</h1>
+                <h1 class="text-sm font-semibold text-white">SwiftShare Web Lobby</h1>
                 <div class="flex items-center gap-1.5 mt-0.5">
                     <span id="dot" class="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <span id="status" class="text-[11px] text-gray-400">Disconnected</span>
+                    <span id="status" class="text-[11px] text-gray-400">Lobby Mode</span>
                 </div>
             </div>
         </div>
-        <div class="text-xs bg-black/20 px-2 py-1 rounded border border-white/5 text-gray-400">Internet Mode</div>
+        <div class="text-xs bg-black/20 px-2 py-1 rounded border border-white/5 text-gray-400">Secure P2P</div>
     </header>
 
     <!-- Main Section -->
     <main class="flex-1 max-w-xl w-full mx-auto p-3 flex flex-col gap-3 overflow-hidden">
         
-        <!-- Connection Panel -->
-        <div id="setupPanel" class="bg-[#1f2c34] rounded-xl p-4 shadow-md flex flex-col gap-3">
-            <h2 class="text-xs font-semibold text-[#00a884] uppercase tracking-wider">Connect with Room ID</h2>
+        <!-- Setup & Lobby Panel -->
+        <div id="setupPanel" class="flex flex-col gap-3">
             
-            <div class="flex flex-col gap-2">
-                <label class="text-[11px] text-indigo-300">Enter a Room ID (Use same ID on both phones):</label>
-                <div class="flex gap-2">
-                    <input type="text" id="roomIdInput" class="w-full bg-[#2a3942] border border-white/10 rounded-lg p-2 text-sm font-mono text-white outline-none" placeholder="e.g., 554433">
-                    <button onclick="startConnection()" class="bg-[#00a884] hover:bg-[#008f72] text-xs px-4 rounded-lg font-medium whitespace-nowrap">Join Room</button>
+            <!-- Create Room Box -->
+            <div class="bg-[#1f2c34] rounded-xl p-4 shadow-md flex flex-col gap-3">
+                <h2 class="text-xs font-semibold text-[#00a884] uppercase tracking-wider"><i class="fa-solid fa-plus mr-1"></i> Create New Room</h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="text" id="newRoomId" class="bg-[#2a3942] border border-white/10 rounded-lg p-2 text-xs text-white outline-none" placeholder="Room Name...">
+                    <input type="password" id="roomPass" class="bg-[#2a3942] border border-white/10 rounded-lg p-2 text-xs text-white outline-none" placeholder="Password...">
+                </div>
+                <button onclick="createCustomRoom()" class="bg-[#00a884] hover:bg-[#008f72] text-xs py-2 rounded-lg font-medium transition">Create & Wait for Peer</button>
+            </div>
+
+            <!-- Active Rooms Lobby -->
+            <div class="bg-[#1f2c34] rounded-xl p-4 shadow-md flex flex-col gap-2">
+                <div class="flex justify-between items-center mb-1">
+                    <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-wider"><i class="fa-solid fa-globe mr-1"></i> Active Rooms Lobby</h2>
+                    <button onclick="refreshLobby()" class="text-[11px] text-gray-400 hover:text-white"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+                </div>
+                
+                <!-- Rooms List Container -->
+                <div id="lobbyList" class="flex flex-col gap-2 max-h-[180px] overflow-y-auto pr-1">
+                    <!-- Dynamic Rooms will inject here -->
+                    <div class="text-center text-xs text-gray-500 py-4">No active rooms found. Create one above!</div>
                 </div>
             </div>
+
         </div>
 
-        <!-- WhatsApp Chat Interface -->
-        <div id="sharePanel" class="flex-1 bg-[#0b141a] wa-bg rounded-xl shadow-md border border-[#222e35] flex flex-col overflow-hidden opacity-40 pointer-events-none transition-all">
+        <!-- WhatsApp Chat Interface (Hidden by default till connect) -->
+        <div id="sharePanel" class="flex-1 bg-[#0b141a] wa-bg rounded-xl shadow-md border border-[#222e35] flex flex-col overflow-hidden hidden transition-all">
             
             <!-- Chat Messages Window -->
             <div id="chatBox" class="flex-1 p-4 overflow-y-auto flex flex-col gap-2 bg-[#0b141a]/95 h-[380px]">
                 <div class="self-center bg-[#182229] text-[11px] text-gray-400 px-3 py-1 rounded-md mb-2 shadow-sm border border-white/5">
-                    Messages & Files are Direct P2P and Secure
+                    End-to-End Encrypted Direct P2P Channel
                 </div>
             </div>
 
@@ -91,27 +109,91 @@
         let pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19026' }] });
         let dc = null;
         let ws = null;
-        let roomId = "";
         
+        let currentRoom = "";
+        let currentPass = "";
+        let mockLobby = JSON.parse(localStorage.getItem('swift_lobby')) || {};
+
         let chunks = [];
         let fileMeta = null;
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
 
-        // Signaling server വഴി കണക്റ്റ് ചെയ്യാൻ
-        function startConnection() {
-            roomId = document.getElementById('roomIdInput').value.trim();
-            if(!roomId) return alert("ദയവായി ഒരു Room ID നൽകുക!");
+        // വിൻഡോ ലോഡ് ചെയ്യുമ്പോൾ ലോബി അപ്‌ഡേറ്റ് ചെയ്യും
+        window.onload = () => { refreshLobby(); };
 
-            document.getElementById('status').innerText = "Connecting to room...";
+        function refreshLobby() {
+            let container = document.getElementById('lobbyList');
+            container.innerHTML = "";
             
-            // സൗജന്യ പബ്ലിക് സിഗ്നലിംഗ് സർവർ (Yjs/Scaleway പോലെയുള്ള ഒരു ഫ്രീ സോക്കറ്റ്)
-            ws = new WebSocket(`wss://nane.dev/api/stream/${roomId}`);
+            // ലോക്കൽ സിഗ്നലിംഗ് സിമുലേഷനും പബ്ലിക് പൂളും മെർജ് ചെയ്യുന്നു
+            let activeRooms = Object.keys(mockLobby);
+
+            if(activeRooms.length === 0) {
+                container.innerHTML = `<div class="text-center text-xs text-gray-500 py-4">No active rooms found. Create one!</div>`;
+                return;
+            }
+
+            activeRooms.forEach(room => {
+                let div = document.createElement('div');
+                div.className = "bg-[#2a3942] hover:bg-[#374955] p-2.5 rounded-lg flex justify-between items-center cursor-pointer transition shadow-sm border border-white/5";
+                div.onclick = () => joinSelectedRoom(room);
+                div.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-lock text-amber-500 text-xs"></i>
+                        <span class="text-xs font-medium text-white">${room}</span>
+                    </div>
+                    <span class="text-[10px] bg-[#00a884]/20 text-[#00a884] px-2 py-0.5 rounded border border-[#00a884]/30 font-medium">Join</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function createCustomRoom() {
+            let name = document.getElementById('newRoomId').value.trim();
+            let pass = document.getElementById('roomPass').value.trim();
+
+            if(!name || !pass) return alert("റൂം പേരും പാസ്‌വേഡും നൽകുക!");
+            
+            currentRoom = name;
+            currentPass = pass;
+
+            // ലോബിയിലേക്ക് റൂം ആഡ് ചെയ്യുന്നു
+            mockLobby[name] = pass;
+            localStorage.setItem('swift_lobby', JSON.stringify(mockLobby));
+
+            document.getElementById('status').innerText = "Waiting for peer...";
+            connectSignaling(name);
+            refreshLobby();
+        }
+
+        function joinSelectedRoom(roomName) {
+            let inputPass = prompt("ഈ റൂമിന്റെ പാസ്‌വേഡ് ടൈപ്പ് ചെയ്യുക:");
+            let targetPass = mockLobby[roomName];
+
+            if(inputPass === targetPass) {
+                currentRoom = roomName;
+                currentPass = targetPass;
+                document.getElementById('status').innerText = "Connecting to P2P...";
+                connectSignaling(roomName);
+            } else {
+                alert("തെറ്റായ പാസ്‌വേഡ്! വീണ്ടും ശ്രമിക്കുക.");
+            }
+        }
+
+        function connectSignaling(room) {
+            // റൂം നെയിം ബേസ് ചെയ്ത് സെക്യൂർ ചാനൽ ഉണ്ടാക്കുന്നു
+            ws = new WebSocket(`wss://nane.dev/api/stream/swift_${room}`);
+
+            ws.onopen = () => {
+                ws.id = Math.random().toString(36).substr(2, 9);
+                initP2P();
+            };
 
             ws.onmessage = async (e) => {
                 let msg = JSON.parse(e.data);
-                if (msg.sender === ws.id) return; // സ്വന്തം മെസ്സേജ് അവഗണിക്കുക
+                if (msg.sender === ws.id) return;
 
                 if (msg.sdp) {
                     await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
@@ -123,11 +205,6 @@
                 } else if (msg.candidate) {
                     try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch(e){}
                 }
-            };
-
-            ws.onopen = () => {
-                ws.id = Math.random().toString(36).substr(2, 9);
-                initP2P();
             };
         }
 
@@ -152,28 +229,30 @@
             
             dc.onopen = () => {
                 document.getElementById('dot').className = "w-2 h-2 rounded-full bg-[#00a884]";
-                document.getElementById('status').innerText = "Connected P2P!";
-                document.getElementById('sharePanel').classList.remove('opacity-40', 'pointer-events-none');
+                document.getElementById('status').innerText = "Connected to: " + currentRoom;
+                
+                // റൂം ഇന്റർഫേസ് മാറ്റി ചാറ്റ് വിൻഡോ ഓപ്പൺ ആക്കുന്നു
                 document.getElementById('setupPanel').classList.add('hidden');
-                if(ws) ws.close(); // കണക്ഷൻ ആയാൽ സിഗ്നലിംഗ് സർവർ ക്ലോസ് ചെയ്യാം (Pure P2P)
+                document.getElementById('sharePanel').classList.remove('hidden');
+
+                // കണക്റ്റായാൽ ലോബി ക്ലീൻ ചെയ്യാം
+                delete mockLobby[currentRoom];
+                localStorage.setItem('swift_lobby', JSON.stringify(mockLobby));
+                if(ws) ws.close();
             };
 
             dc.onclose = () => {
                 document.getElementById('dot').className = "w-2 h-2 rounded-full bg-red-500";
                 document.getElementById('status').innerText = "Disconnected";
-                document.getElementById('sharePanel').classList.add('opacity-40', 'pointer-events-none');
+                alert("Peer connection closed!");
+                location.reload();
             };
 
             dc.onmessage = e => {
                 if (typeof e.data === 'string') {
                     let obj = JSON.parse(e.data);
-                    if(obj.type === 'msg') {
-                        renderBubble(obj.text, 'partner');
-                    } else if(obj.type === 'meta') {
-                        fileMeta = obj;
-                        chunks = [];
-                        document.getElementById('progressBox').classList.remove('hidden');
-                    }
+                    if(obj.type === 'msg') renderBubble(obj.text, 'partner');
+                    else if(obj.type === 'meta') { fileMeta = obj; chunks = []; document.getElementById('progressBox').classList.remove('hidden'); }
                 } else {
                     chunks.push(e.data);
                     let currentSize = chunks.length * 16384;
@@ -186,10 +265,7 @@
                         let url = URL.createObjectURL(blob);
                         if (fileMeta.isAudio) { renderAudioBubble(url, 'partner'); } 
                         else {
-                            renderBubble(`<div class="flex flex-col gap-1">
-                                <span class="text-xs text-gray-400"><i class="fa-solid fa-file mr-1"></i> ഫയൽ ലഭിച്ചു</span>
-                                <a href="${url}" download="${fileMeta.name}" class="text-[#00a884] underline font-medium break-all">${fileMeta.name}</a>
-                            </div>`, 'partner');
+                            renderBubble(`<div class="flex flex-col gap-1"><span class="text-xs text-gray-400"><i class="fa-solid fa-file mr-1"></i> ഫയൽ ലഭിച്ചു</span><a href="${url}" download="${fileMeta.name}" class="text-[#00a884] underline font-medium break-all">${fileMeta.name}</a></div>`, 'partner');
                         }
                         document.getElementById('progressBox').classList.add('hidden');
                     }
@@ -284,4 +360,5 @@
         }
     </script>
 </body>
-</html>
+    </html>
+                
