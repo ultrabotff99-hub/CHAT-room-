@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftShare - Online P2P Chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #0b141a; font-family: sans-serif; }
+        .wa-bg { background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); }
+    </style>
+</head>
+<body class="text-gray-200 min-h-screen flex flex-col justify-between">
+
+    <!-- Header (WhatsApp Style) -->
+    <header class="bg-[#1f2c34] px-4 py-3 flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-[#00a884] rounded-full flex items-center justify-center text-white font-bold">
+                <i class="fa-solid fa-bolt text-lg"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-semibold text-white">SwiftShare Online P2P</h1>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                    <span id="dot" class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span id="status" class="text-[11px] text-gray-400">Disconnected</span>
+                </div>
+            </div>
+        </div>
+        <div class="text-xs bg-black/20 px-2 py-1 rounded border border-white/5 text-gray-400">Internet Mode</div>
+    </header>
+
+    <!-- Main Section -->
+    <main class="flex-1 max-w-xl w-full mx-auto p-3 flex flex-col gap-3 overflow-hidden">
+        
+        <!-- Connection Panel -->
+        <div id="setupPanel" class="bg-[#1f2c34] rounded-xl p-4 shadow-md flex flex-col gap-3">
+            <h2 class="text-xs font-semibold text-[#00a884] uppercase tracking-wider">Connect with Room ID</h2>
+            
+            <div class="flex flex-col gap-2">
+                <label class="text-[11px] text-indigo-300">Enter a Room ID (Use same ID on both phones):</label>
+                <div class="flex gap-2">
+                    <input type="text" id="roomIdInput" class="w-full bg-[#2a3942] border border-white/10 rounded-lg p-2 text-sm font-mono text-white outline-none" placeholder="e.g., 554433">
+                    <button onclick="startConnection()" class="bg-[#00a884] hover:bg-[#008f72] text-xs px-4 rounded-lg font-medium whitespace-nowrap">Join Room</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- WhatsApp Chat Interface -->
+        <div id="sharePanel" class="flex-1 bg-[#0b141a] wa-bg rounded-xl shadow-md border border-[#222e35] flex flex-col overflow-hidden opacity-40 pointer-events-none transition-all">
+            
+            <!-- Chat Messages Window -->
+            <div id="chatBox" class="flex-1 p-4 overflow-y-auto flex flex-col gap-2 bg-[#0b141a]/95 h-[380px]">
+                <div class="self-center bg-[#182229] text-[11px] text-gray-400 px-3 py-1 rounded-md mb-2 shadow-sm border border-white/5">
+                    Messages & Files are Direct P2P and Secure
+                </div>
+            </div>
+
+            <!-- File Progress Bar -->
+            <div id="progressBox" class="hidden px-4 py-2 bg-[#1f2c34] border-t border-white/5">
+                <div class="flex justify-between text-[10px] text-gray-400 mb-1">
+                    <span id="progressFile">Transferring...</span>
+                    <span id="progressTxt">0%</span>
+                </div>
+                <div class="w-full bg-[#2a3942] h-1 rounded-full overflow-hidden">
+                    <div id="progressBar" class="bg-[#00a884] h-full w-0 transition-all duration-150"></div>
+                </div>
+            </div>
+
+            <!-- Chat Input Controls -->
+            <div class="bg-[#1f2c34] p-2 flex items-center gap-2 border-t border-[#222e35]">
+                <div class="relative bg-transparent hover:bg-[#2a3942] w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition">
+                    <input type="file" id="fileInput" class="absolute inset-0 opacity-0 cursor-pointer" onchange="sendFile()">
+                    <i class="fa-solid fa-paperclip text-lg text-gray-400 hover:text-white"></i>
+                </div>
+
+                <input type="text" id="msgInput" onkeydown="if(event.key==='Enter') sendMsg()" class="flex-1 bg-[#2a3942] text-sm text-white px-4 py-1.5 rounded-full outline-none placeholder-gray-500" placeholder="Type a message...">
+
+                <button id="micBtn" onclick="toggleVoiceRecord()" class="w-9 h-9 bg-[#2a3942] hover:bg-[#374955] rounded-full flex items-center justify-center text-gray-400 hover:text-white transition">
+                    <i id="micIcon" class="fa-solid fa-microphone text-base"></i>
+                </button>
+
+                <button onclick="sendMsg()" class="w-9 h-9 bg-[#00a884] hover:bg-[#008f72] rounded-full flex items-center justify-center text-white transition shadow-sm">
+                    <i class="fa-solid fa-paper-plane text-xs pl-0.5"></i>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19026' }] });
+        let dc = null;
+        let ws = null;
+        let roomId = "";
+        
+        let chunks = [];
+        let fileMeta = null;
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        // Signaling server വഴി കണക്റ്റ് ചെയ്യാൻ
+        function startConnection() {
+            roomId = document.getElementById('roomIdInput').value.trim();
+            if(!roomId) return alert("ദയവായി ഒരു Room ID നൽകുക!");
+
+            document.getElementById('status').innerText = "Connecting to room...";
+            
+            // സൗജന്യ പബ്ലിക് സിഗ്നലിംഗ് സർവർ (Yjs/Scaleway പോലെയുള്ള ഒരു ഫ്രീ സോക്കറ്റ്)
+            ws = new WebSocket(`wss://nane.dev/api/stream/${roomId}`);
+
+            ws.onmessage = async (e) => {
+                let msg = JSON.parse(e.data);
+                if (msg.sender === ws.id) return; // സ്വന്തം മെസ്സേജ് അവഗണിക്കുക
+
+                if (msg.sdp) {
+                    await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                    if (msg.sdp.type === 'offer') {
+                        let answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        ws.send(JSON.stringify({ sdp: pc.localDescription, sender: ws.id }));
+                    }
+                } else if (msg.candidate) {
+                    try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch(e){}
+                }
+            };
+
+            ws.onopen = () => {
+                ws.id = Math.random().toString(36).substr(2, 9);
+                initP2P();
+            };
+        }
+
+        async function initP2P() {
+            dc = pc.createDataChannel("vanillaWhatsApp");
+            DCSetup(dc);
+
+            pc.onicecandidate = e => {
+                if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate, sender: ws.id }));
+            };
+
+            pc.ondatachannel = e => { DCSetup(e.channel); };
+
+            let offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.send(JSON.stringify({ sdp: pc.localDescription, sender: ws.id }));
+        }
+
+        function DCSetup(channel) {
+            dc = channel;
+            dc.binaryType = 'arraybuffer';
+            
+            dc.onopen = () => {
+                document.getElementById('dot').className = "w-2 h-2 rounded-full bg-[#00a884]";
+                document.getElementById('status').innerText = "Connected P2P!";
+                document.getElementById('sharePanel').classList.remove('opacity-40', 'pointer-events-none');
+                document.getElementById('setupPanel').classList.add('hidden');
+                if(ws) ws.close(); // കണക്ഷൻ ആയാൽ സിഗ്നലിംഗ് സർവർ ക്ലോസ് ചെയ്യാം (Pure P2P)
+            };
+
+            dc.onclose = () => {
+                document.getElementById('dot').className = "w-2 h-2 rounded-full bg-red-500";
+                document.getElementById('status').innerText = "Disconnected";
+                document.getElementById('sharePanel').classList.add('opacity-40', 'pointer-events-none');
+            };
+
+            dc.onmessage = e => {
+                if (typeof e.data === 'string') {
+                    let obj = JSON.parse(e.data);
+                    if(obj.type === 'msg') {
+                        renderBubble(obj.text, 'partner');
+                    } else if(obj.type === 'meta') {
+                        fileMeta = obj;
+                        chunks = [];
+                        document.getElementById('progressBox').classList.remove('hidden');
+                    }
+                } else {
+                    chunks.push(e.data);
+                    let currentSize = chunks.length * 16384;
+                    let per = Math.min(Math.round((currentSize / fileMeta.size) * 100), 100);
+                    document.getElementById('progressBar').style.width = per + '%';
+                    document.getElementById('progressTxt').innerText = per + '%';
+
+                    if (currentSize >= fileMeta.size) {
+                        let blob = new Blob(chunks, { type: fileMeta.mime || 'application/octet-stream' });
+                        let url = URL.createObjectURL(blob);
+                        if (fileMeta.isAudio) { renderAudioBubble(url, 'partner'); } 
+                        else {
+                            renderBubble(`<div class="flex flex-col gap-1">
+                                <span class="text-xs text-gray-400"><i class="fa-solid fa-file mr-1"></i> ഫയൽ ലഭിച്ചു</span>
+                                <a href="${url}" download="${fileMeta.name}" class="text-[#00a884] underline font-medium break-all">${fileMeta.name}</a>
+                            </div>`, 'partner');
+                        }
+                        document.getElementById('progressBox').classList.add('hidden');
+                    }
+                }
+            };
+        }
+
+        function renderBubble(content, sender) {
+            let box = document.getElementById('chatBox');
+            let div = document.createElement('div');
+            div.className = sender === 'you' ? 
+                "self-end bg-[#005c4b] text-white text-sm px-3 py-1.5 rounded-lg rounded-tr-none max-w-[85%] shadow-sm break-words" : 
+                "self-start bg-[#202c33] text-white text-sm px-3 py-1.5 rounded-lg rounded-tl-none max-w-[85%] shadow-sm break-words";
+            div.innerHTML = content;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function renderAudioBubble(url, sender) {
+            let content = `
+                <div class="flex items-center gap-2 py-1 min-w-[200px]">
+                    <i class="fa-solid fa-microphone text-[#00a884] text-base"></i>
+                    <audio src="${url}" controls class="w-full h-8 bg-transparent text-xs"></audio>
+                </div>`;
+            renderBubble(content, sender);
+        }
+
+        function sendMsg() {
+            let input = document.getElementById('msgInput');
+            if(!input.value.trim() || !dc) return;
+            dc.send(JSON.stringify({ type: 'msg', text: input.value }));
+            renderBubble(input.value, 'you');
+            input.value = "";
+        }
+
+        async function toggleVoiceRecord() {
+            let micBtn = document.getElementById('micBtn');
+            let micIcon = document.getElementById('micIcon');
+            if (!isRecording) {
+                try {
+                    let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = e => { audioChunks.push(e.data); };
+                    mediaRecorder.onstop = () => {
+                        let audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+                        renderAudioBubble(URL.createObjectURL(audioBlob), 'you');
+                        sendBinaryFile(audioBlob, "Voice_Message.ogg", true);
+                    };
+                    mediaRecorder.start();
+                    isRecording = true;
+                    micBtn.className = "w-9 h-9 bg-red-600 rounded-full flex items-center justify-center text-white";
+                    micIcon.className = "fa-solid fa-stop text-lg";
+                } catch (err) { alert("മൈക്ക് അനുമതി വേണം!"); }
+            } else {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                micBtn.className = "w-9 h-9 bg-[#2a3942] rounded-full flex items-center justify-center text-gray-400";
+                micIcon.className = "fa-solid fa-microphone text-base";
+            }
+        }
+
+        function sendFile() {
+            let file = document.getElementById('fileInput').files[0];
+            if(file && dc) sendBinaryFile(file, file.name, false);
+        }
+
+        function sendBinaryFile(blob, filename, isAudio) {
+            dc.send(JSON.stringify({ type: 'meta', name: filename, size: blob.size, mime: blob.type, isAudio: isAudio }));
+            if(!isAudio) document.getElementById('progressBox').classList.remove('hidden');
+
+            let size = 16384, slice = new FileReader(), offset = 0;
+            slice.onload = e => {
+                dc.send(e.target.result);
+                offset += e.target.result.byteLength;
+                if(!isAudio) {
+                    let per = Math.min(Math.round((offset / blob.size) * 100), 100);
+                    document.getElementById('progressBar').style.width = per + '%';
+                    document.getElementById('progressTxt').innerText = per + '%';
+                }
+                if(offset < blob.size) read();
+                else {
+                    setTimeout(() => { 
+                        document.getElementById('progressBox').classList.add('hidden'); 
+                        if(!isAudio) renderBubble(`<div class="flex flex-col gap-1"><span class="text-xs text-emerald-400"><i class="fa-solid fa-check-double mr-1"></i> ഫയൽ അയച്ചു</span><span class="text-gray-300 break-all font-medium">${filename}</span></div>`, 'you');
+                    }, 500);
+                }
+            };
+            function read() { slice.readAsArrayBuffer(blob.slice(offset, offset + size)); }
+            read();
+        }
+    </script>
+</body>
+</html>
